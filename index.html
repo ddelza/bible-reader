@@ -121,10 +121,33 @@
     border-radius: 10px;
     font-size: 14px;
   }
-  .record-item { padding: 8px 0; border-top: 1px dashed var(--border); }
+  .record-item {
+    padding: 8px 0;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
   .record-item:first-child { border-top: none; }
+  .record-body { flex: 1; min-width: 0; }
   .record-meta { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
   .record-content { white-space: pre-wrap; }
+  .record-delete-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .placeholder, .error {
     color: var(--muted);
     text-align: center;
@@ -228,7 +251,11 @@
     <h3>메모하기</h3>
     <div class="modal-ref" id="recordModalRef"></div>
     <label>날짜<input type="date" id="recordDate"></label>
-    <label>작성자<input type="text" id="recordAuthor" placeholder="이름"></label>
+    <label>작성자
+      <select id="recordAuthor">
+        <option value="">작성자 선택</option>
+      </select>
+    </label>
     <label>내용<textarea id="recordContent" rows="4" placeholder="이 말씀에 대한 메모를 남겨보세요"></textarea></label>
     <div class="modal-actions">
       <button id="recordCancelBtn" type="button">취소</button>
@@ -321,6 +348,8 @@
         if (action === 'getBooks') runner.getBooks();
         else if (action === 'getChapterVerses') runner.getChapterVerses(params.book, params.chapter);
         else if (action === 'submitRecord') runner.submitRecord(params.book, params.chapter, params.verse, params.date, params.author, params.content);
+        else if (action === 'deleteRecord') runner.deleteRecord(params.book, params.chapter, params.verse, params.ts);
+        else if (action === 'getAuthors') runner.getAuthors();
         else reject(new Error('unknown action: ' + action));
       } else {
         const url = new URL(APPS_SCRIPT_URL);
@@ -476,9 +505,12 @@
 
   function renderRecordList(records) {
     return (records || []).map(r =>
-      '<div class="record-item">' +
-        '<div class="record-meta">' + escapeHtml(r.날짜) + ' · ' + escapeHtml(r.기록자) + '</div>' +
-        '<div class="record-content">' + escapeHtml(r.내용) + '</div>' +
+      '<div class="record-item" data-ts="' + escapeHtml(r.등록시각) + '">' +
+        '<div class="record-body">' +
+          '<div class="record-meta">' + escapeHtml(r.날짜) + ' · ' + escapeHtml(r.기록자) + '</div>' +
+          '<div class="record-content">' + escapeHtml(r.내용) + '</div>' +
+        '</div>' +
+        '<button type="button" class="record-delete-btn" title="메모 삭제">✕</button>' +
       '</div>'
     ).join('') || '<div class="record-meta">아직 메모가 없어요.</div>';
   }
@@ -490,6 +522,14 @@
   // ---- 절 탭 ----
   // 절 탭 -> 번역본 펼치기(+메모하기 버튼), (숫자) 배지 탭 -> 메모 목록 펼치기.
   resultEl.addEventListener('click', e => {
+    const deleteBtn = e.target.closest('.record-delete-btn');
+    if (deleteBtn) {
+      const line = deleteBtn.closest('.verse-line');
+      const item = deleteBtn.closest('.record-item');
+      if (confirm('이 메모를 삭제할까요?')) deleteRecord(line.dataset.verse, item.dataset.ts);
+      return;
+    }
+
     const memoBtn = e.target.closest('.write-memo-btn');
     if (memoBtn) {
       const line = memoBtn.closest('.verse-line');
@@ -508,6 +548,18 @@
     if (line) line.querySelector('.verse-expand').classList.toggle('hidden');
   });
 
+  function deleteRecord(verseNum, ts) {
+    callApi('deleteRecord', {
+      book: chapterCache.book, chapter: chapterCache.chapter, verse: verseNum, ts: ts
+    }).then(data => {
+      const v = chapterCache.verses.find(v => String(v.절) === String(verseNum));
+      if (v) { v.기록 = data.records; v.기록수 = data.records.length; }
+      render();
+    }).catch(err => {
+      alert('삭제 실패: ' + err.message);
+    });
+  }
+
   // ---- 기록하기 팝업 ----
   const recordModal = document.getElementById('recordModal');
   const recordModalRef = document.getElementById('recordModalRef');
@@ -517,12 +569,24 @@
   const recordSaveBtn = document.getElementById('recordSaveBtn');
   const recordCancelBtn = document.getElementById('recordCancelBtn');
   let modalVerseNum = null;
+  let authorsCache = [];
+
+  function loadAuthors() {
+    callApi('getAuthors').then(data => {
+      authorsCache = data || [];
+      populateAuthorSelect();
+    }).catch(() => { /* 실패해도 모달은 열 수 있게 조용히 무시 */ });
+  }
+  function populateAuthorSelect() {
+    recordAuthorInput.innerHTML = '<option value="">작성자 선택</option>' +
+      authorsCache.map(a => '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>').join('');
+  }
 
   function openRecordModal(verseNum) {
     modalVerseNum = verseNum;
     recordModalRef.textContent = refLabel() + ' ' + verseNum + '절';
     recordDateInput.value = new Date().toISOString().slice(0, 10);
-    recordAuthorInput.value = '';
+    populateAuthorSelect();
     recordContentInput.value = '';
     recordModal.classList.remove('hidden');
   }
@@ -565,6 +629,8 @@
     opt.textContent = b.번호 + '. ' + b.이름;
     bookSelect.appendChild(opt);
   });
+
+  loadAuthors();
 </script>
 </body>
 </html>

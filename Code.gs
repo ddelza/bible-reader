@@ -15,6 +15,8 @@ function doGet(e) {
     if (action === 'getBooks') data = getBooks();
     else if (action === 'getChapterVerses') data = getChapterVerses(e.parameter.book, e.parameter.chapter);
     else if (action === 'submitRecord') data = submitRecord(e.parameter.book, e.parameter.chapter, e.parameter.verse, e.parameter.date, e.parameter.author, e.parameter.content);
+    else if (action === 'deleteRecord') data = deleteRecord(e.parameter.book, e.parameter.chapter, e.parameter.verse, e.parameter.ts);
+    else if (action === 'getAuthors') data = getAuthors();
     else data = { error: 'unknown action: ' + action };
   } catch (err) {
     data = { error: err.toString() };
@@ -128,8 +130,9 @@ function getChapterVerses(book, chapter) {
 
   verses.sort((a, b) => a.절 - b.절);
 
-  // 각 절에 가족기록(개수/내용) 붙이기
-  const records = loadRecordsFor(book, chapterNum);
+  // 각 절에 가족기록(개수/내용) 붙이기 (이미 열어둔 ss를 재사용 — 매번 openById를
+  // 새로 하면 이 스프레드시트처럼 큰 파일에서는 그만큼 느려진다)
+  const records = loadRecordsFor(ss, book, chapterNum);
   verses.forEach(v => {
     const list = records[v.절] || [];
     v.기록 = list;
@@ -139,15 +142,28 @@ function getChapterVerses(book, chapter) {
   return { book: book, chapter: chapterNum, verses: verses };
 }
 
+// 성경명 시트의 작성자 목록(F2:F10)을 가져온다. 빈 칸은 제외한다.
+function getAuthors() {
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = findSheet(ss, ['성경명']);
+  if (!sheet) return { error: '성경명 시트를 찾을 수 없습니다.' };
+
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const idxAuthor = findColIndex(header, ['작성자']);
+  if (idxAuthor === -1) return [];
+
+  const values = sheet.getRange(2, idxAuthor + 1, 9, 1).getValues();
+  return values.map(r => String(r[0] || '').trim()).filter(v => v);
+}
+
 // =============================================
-// 가족 기록 (댓글처럼 절마다 누적되는 날짜/기록자/내용)
+// 가족 기록 (댓글처럼 절마다 누적되는 날짜/작성자/내용)
 // =============================================
 
 const RECORD_SHEET_NAME = '가족기록';
 const RECORD_HEADER = ['색인', '장', '절', '날짜', '기록자', '내용', '등록시각'];
 
-function getOrCreateRecordSheet() {
-  const ss = SpreadsheetApp.openById(SS_ID);
+function getOrCreateRecordSheet(ss) {
   let sheet = ss.getSheetByName(RECORD_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(RECORD_SHEET_NAME);
@@ -157,8 +173,8 @@ function getOrCreateRecordSheet() {
 }
 
 // 특정 책의 특정 장에 속한 모든 기록을 절 번호별로 묶어서 반환한다.
-function loadRecordsFor(book, chapter) {
-  const sheet = getOrCreateRecordSheet();
+function loadRecordsFor(ss, book, chapter) {
+  const sheet = getOrCreateRecordSheet(ss);
   const lastRow = sheet.getLastRow();
   const result = {};
   if (lastRow < 2) return result;
@@ -201,13 +217,42 @@ function submitRecord(book, chapter, verse, date, author, content) {
   content = String(content || '').trim();
 
   if (!book || !chapterNum || !verseNum || !author || !content) {
-    return { error: '날짜, 기록자, 내용을 모두 입력해주세요.' };
+    return { error: '날짜, 작성자, 내용을 모두 입력해주세요.' };
   }
 
-  const sheet = getOrCreateRecordSheet();
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreateRecordSheet(ss);
   sheet.appendRow([book, chapterNum, verseNum, date, author, content, new Date()]);
 
-  const records = loadRecordsFor(book, chapterNum);
+  const records = loadRecordsFor(ss, book, chapterNum);
+  return { records: records[verseNum] || [] };
+}
+
+// 등록시각(밀리초 단위 ISO 문자열, 사실상 고유 키)으로 특정 기록 한 건을 찾아 삭제한다.
+function deleteRecord(book, chapter, verse, ts) {
+  const chapterNum = parseInt(chapter, 10);
+  const verseNum = parseInt(verse, 10);
+  if (!book || !chapterNum || !verseNum || !ts) {
+    return { error: '삭제할 기록을 특정할 수 없습니다.' };
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreateRecordSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, RECORD_HEADER.length).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowTs = row[6] instanceof Date ? row[6].toISOString() : String(row[6] || '');
+      if (String(row[0]).trim() === book && parseInt(row[1], 10) === chapterNum &&
+          parseInt(row[2], 10) === verseNum && rowTs === ts) {
+        sheet.deleteRow(2 + i);
+        break;
+      }
+    }
+  }
+
+  const records = loadRecordsFor(ss, book, chapterNum);
   return { records: records[verseNum] || [] };
 }
 
