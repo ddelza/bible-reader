@@ -14,6 +14,7 @@ function doGet(e) {
   try {
     if (action === 'getBooks') data = getBooks();
     else if (action === 'getChapterVerses') data = getChapterVerses(e.parameter.book, e.parameter.chapter);
+    else if (action === 'submitRecord') data = submitRecord(e.parameter.book, e.parameter.chapter, e.parameter.verse, e.parameter.date, e.parameter.author, e.parameter.content);
     else data = { error: 'unknown action: ' + action };
   } catch (err) {
     data = { error: err.toString() };
@@ -126,7 +127,88 @@ function getChapterVerses(book, chapter) {
   }));
 
   verses.sort((a, b) => a.절 - b.절);
+
+  // 각 절에 가족기록(개수/내용) 붙이기
+  const records = loadRecordsFor(book, chapterNum);
+  verses.forEach(v => {
+    const list = records[v.절] || [];
+    v.기록 = list;
+    v.기록수 = list.length;
+  });
+
   return { book: book, chapter: chapterNum, verses: verses };
+}
+
+// =============================================
+// 가족 기록 (댓글처럼 절마다 누적되는 날짜/기록자/내용)
+// =============================================
+
+const RECORD_SHEET_NAME = '가족기록';
+const RECORD_HEADER = ['색인', '장', '절', '날짜', '기록자', '내용', '등록시각'];
+
+function getOrCreateRecordSheet() {
+  const ss = SpreadsheetApp.openById(SS_ID);
+  let sheet = ss.getSheetByName(RECORD_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(RECORD_SHEET_NAME);
+    sheet.appendRow(RECORD_HEADER);
+  }
+  return sheet;
+}
+
+// 특정 책의 특정 장에 속한 모든 기록을 절 번호별로 묶어서 반환한다.
+function loadRecordsFor(book, chapter) {
+  const sheet = getOrCreateRecordSheet();
+  const lastRow = sheet.getLastRow();
+  const result = {};
+  if (lastRow < 2) return result;
+
+  const data = sheet.getRange(2, 1, lastRow - 1, RECORD_HEADER.length).getValues();
+  data.forEach(row => {
+    const [rBook, rChapter, rVerse, date, author, content, ts] = row;
+    if (String(rBook).trim() !== book) return;
+    if (parseInt(rChapter, 10) !== parseInt(chapter, 10)) return;
+    if (!author && !content) return;
+
+    const verseNum = parseInt(rVerse, 10);
+    if (!result[verseNum]) result[verseNum] = [];
+    result[verseNum].push({
+      날짜: formatRecordDate(date),
+      기록자: String(author || ''),
+      내용: String(content || ''),
+      등록시각: ts instanceof Date ? ts.toISOString() : String(ts || '')
+    });
+  });
+
+  Object.keys(result).forEach(k => {
+    result[k].sort((a, b) => a.등록시각.localeCompare(b.등록시각));
+  });
+  return result;
+}
+
+function formatRecordDate(d) {
+  if (d instanceof Date) {
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(d || '');
+}
+
+// 새 기록을 추가하고, 그 절의 최신 기록 목록을 반환한다 (프론트가 다시 조회하지 않아도 되도록).
+function submitRecord(book, chapter, verse, date, author, content) {
+  const chapterNum = parseInt(chapter, 10);
+  const verseNum = parseInt(verse, 10);
+  author = String(author || '').trim();
+  content = String(content || '').trim();
+
+  if (!book || !chapterNum || !verseNum || !author || !content) {
+    return { error: '날짜, 기록자, 내용을 모두 입력해주세요.' };
+  }
+
+  const sheet = getOrCreateRecordSheet();
+  sheet.appendRow([book, chapterNum, verseNum, date, author, content, new Date()]);
+
+  const records = loadRecordsFor(book, chapterNum);
+  return { records: records[verseNum] || [] };
 }
 
 // =============================================

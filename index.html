@@ -69,18 +69,117 @@
     color: var(--accent);
     margin-bottom: 12px;
   }
-  .verse-line { margin-bottom: 6px; }
+  .verse-line {
+    margin-bottom: 6px;
+    padding: 4px 6px;
+    margin-left: -6px;
+    margin-right: -6px;
+    border-radius: 8px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+  }
+  .verse-line.pressing { background: #f0e6d2; }
   .verse-num {
     color: var(--accent);
     font-weight: 600;
     margin-right: 4px;
   }
+  .record-badge {
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 2px;
+  }
+  .hidden { display: none !important; }
+  .verse-expand {
+    margin: 8px 0 4px 18px;
+    padding: 10px 12px;
+    background: #f7f3ec;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: default;
+  }
+  .alt-translation { margin-bottom: 6px; color: #55503f; }
+  .alt-label {
+    font-weight: 600;
+    color: var(--accent);
+    margin-right: 6px;
+    font-size: 12px;
+  }
+  .record-section { margin-top: 6px; }
+  .record-toggle-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .record-list { margin-top: 8px; }
+  .record-item { padding: 8px 0; border-top: 1px dashed var(--border); }
+  .record-item:first-child { border-top: none; }
+  .record-meta { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .record-content { white-space: pre-wrap; }
   .placeholder, .error {
     color: var(--muted);
     text-align: center;
     padding: 30px 0;
   }
   .error { color: #b23b3b; }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 24, 14, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .modal-box {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .modal-box h3 { margin: 0 0 4px; color: var(--accent); }
+  .modal-ref { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .modal-box label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .modal-box input, .modal-box textarea {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .modal-actions button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #recordSaveBtn { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #recordSaveBtn:disabled { opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -118,6 +217,20 @@
 
   <div class="result" id="result">
     <div class="placeholder">색인과 장을 선택하면 말씀을 볼 수 있어요.</div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="recordModal">
+  <div class="modal-box">
+    <h3>기록하기</h3>
+    <div class="modal-ref" id="recordModalRef"></div>
+    <label>날짜<input type="date" id="recordDate"></label>
+    <label>기록자<input type="text" id="recordAuthor" placeholder="이름"></label>
+    <label>내용<textarea id="recordContent" rows="4" placeholder="이 말씀에 대한 기록을 남겨보세요"></textarea></label>
+    <div class="modal-actions">
+      <button id="recordCancelBtn" type="button">취소</button>
+      <button id="recordSaveBtn" type="button">저장</button>
+    </div>
   </div>
 </div>
 
@@ -204,6 +317,7 @@
         const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
         if (action === 'getBooks') runner.getBooks();
         else if (action === 'getChapterVerses') runner.getChapterVerses(params.book, params.chapter);
+        else if (action === 'submitRecord') runner.submitRecord(params.book, params.chapter, params.verse, params.date, params.author, params.content);
         else reject(new Error('unknown action: ' + action));
       } else {
         const url = new URL(APPS_SCRIPT_URL);
@@ -316,27 +430,162 @@
     return t;
   }
 
+  const ALL_TRANSLATIONS = ['개역개정', '새번역', 'ESV'];
+
+  function refLabel() {
+    if (!chapterCache) return '';
+    const book = booksCache.find(b => b.색인 === chapterCache.book);
+    const bookLabel = book ? book.이름 : chapterCache.book;
+    return bookLabel + ' ' + chapterCache.chapter + '장';
+  }
+
   function render() {
     if (!chapterCache) return;
     const translation = translationSelect.value;
-    const book = booksCache.find(b => b.색인 === chapterCache.book);
-    const bookLabel = book ? book.이름 : chapterCache.book;
-    const ref = bookLabel + ' ' + chapterCache.chapter + '장';
+    const ref = refLabel();
 
     const selectedVerse = verseSelect.value;
     let verses = chapterCache.verses;
     if (selectedVerse) verses = verses.filter(v => String(v.절) === String(selectedVerse));
 
     let html = '<div class="ref">' + escapeHtml(ref + (selectedVerse ? (' ' + selectedVerse + '절') : '')) + '</div>';
-    html += verses.map(v =>
-      '<div class="verse-line"><span class="verse-num">' + v.절 + '</span>' + escapeHtml(cleanText(translation, v[translation])) + '</div>'
-    ).join('');
+    html += verses.map(v => renderVerseLine(v, translation)).join('');
     resultEl.innerHTML = html;
+  }
+
+  function renderVerseLine(v, translation) {
+    const mainText = escapeHtml(cleanText(translation, v[translation]));
+    const count = v.기록수 || 0;
+    const badge = count > 0 ? ' <span class="record-badge">(' + count + ')</span>' : '';
+
+    const others = ALL_TRANSLATIONS.filter(t => t !== translation).map(t =>
+      '<div class="alt-translation"><span class="alt-label">' + t + '</span>' + escapeHtml(cleanText(t, v[t])) + '</div>'
+    ).join('');
+
+    const recordSection = count > 0
+      ? '<div class="record-section">' +
+          '<button type="button" class="record-toggle-btn">기록 확인하기 (' + count + ')</button>' +
+          '<div class="record-list hidden">' + renderRecordList(v.기록) + '</div>' +
+        '</div>'
+      : '';
+
+    return '<div class="verse-line" data-verse="' + v.절 + '">' +
+      '<span class="verse-num">' + v.절 + '</span>' + mainText + badge +
+      '<div class="verse-expand hidden">' + others + recordSection + '</div>' +
+    '</div>';
+  }
+
+  function renderRecordList(records) {
+    return (records || []).map(r =>
+      '<div class="record-item">' +
+        '<div class="record-meta">' + escapeHtml(r.날짜) + ' · ' + escapeHtml(r.기록자) + '</div>' +
+        '<div class="record-content">' + escapeHtml(r.내용) + '</div>' +
+      '</div>'
+    ).join('') || '<div class="record-meta">아직 기록이 없어요.</div>';
   }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+
+  // ---- 절 탭(번역 펼치기) / 길게 누르기(기록하기) ----
+  let pressTimer = null;
+  let pressingLine = null;
+  let pressStartXY = null;
+  let longPressFired = false;
+  const LONG_PRESS_MS = 900;
+  const MOVE_CANCEL_PX = 10;
+
+  function clearPress() {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (pressingLine) { pressingLine.classList.remove('pressing'); pressingLine = null; }
+  }
+
+  resultEl.addEventListener('pointerdown', e => {
+    const line = e.target.closest('.verse-line');
+    if (!line) return;
+    longPressFired = false;
+    pressStartXY = [e.clientX, e.clientY];
+    pressingLine = line;
+    line.classList.add('pressing');
+    pressTimer = setTimeout(() => {
+      longPressFired = true;
+      line.classList.remove('pressing');
+      openRecordModal(line.dataset.verse);
+    }, LONG_PRESS_MS);
+  });
+  resultEl.addEventListener('pointermove', e => {
+    if (!pressTimer || !pressStartXY) return;
+    const dx = e.clientX - pressStartXY[0], dy = e.clientY - pressStartXY[1];
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) clearPress();
+  });
+  resultEl.addEventListener('pointerup', clearPress);
+  resultEl.addEventListener('pointercancel', clearPress);
+  resultEl.addEventListener('contextmenu', e => {
+    if (e.target.closest('.verse-line')) e.preventDefault();
+  });
+
+  resultEl.addEventListener('click', e => {
+    if (longPressFired) { longPressFired = false; return; } // 길게 누른 직후 발생하는 클릭은 무시
+
+    const recordBtn = e.target.closest('.record-toggle-btn');
+    if (recordBtn) {
+      recordBtn.closest('.record-section').querySelector('.record-list').classList.toggle('hidden');
+      return;
+    }
+
+    const line = e.target.closest('.verse-line');
+    if (line) line.querySelector('.verse-expand').classList.toggle('hidden');
+  });
+
+  // ---- 기록하기 팝업 ----
+  const recordModal = document.getElementById('recordModal');
+  const recordModalRef = document.getElementById('recordModalRef');
+  const recordDateInput = document.getElementById('recordDate');
+  const recordAuthorInput = document.getElementById('recordAuthor');
+  const recordContentInput = document.getElementById('recordContent');
+  const recordSaveBtn = document.getElementById('recordSaveBtn');
+  const recordCancelBtn = document.getElementById('recordCancelBtn');
+  let modalVerseNum = null;
+
+  function openRecordModal(verseNum) {
+    modalVerseNum = verseNum;
+    recordModalRef.textContent = refLabel() + ' ' + verseNum + '절';
+    recordDateInput.value = new Date().toISOString().slice(0, 10);
+    recordAuthorInput.value = '';
+    recordContentInput.value = '';
+    recordModal.classList.remove('hidden');
+  }
+  function closeRecordModal() {
+    recordModal.classList.add('hidden');
+  }
+  recordCancelBtn.addEventListener('click', closeRecordModal);
+  recordModal.addEventListener('click', e => {
+    if (e.target === recordModal) closeRecordModal(); // 바깥 영역 탭하면 닫기
+  });
+  recordSaveBtn.addEventListener('click', () => {
+    const date = recordDateInput.value;
+    const author = recordAuthorInput.value.trim();
+    const content = recordContentInput.value.trim();
+    if (!author || !content) { alert('기록자와 내용을 입력해주세요.'); return; }
+
+    recordSaveBtn.disabled = true;
+    recordSaveBtn.textContent = '저장 중...';
+    callApi('submitRecord', {
+      book: chapterCache.book, chapter: chapterCache.chapter, verse: modalVerseNum,
+      date: date, author: author, content: content
+    }).then(data => {
+      const v = chapterCache.verses.find(v => String(v.절) === String(modalVerseNum));
+      if (v) { v.기록 = data.records; v.기록수 = data.records.length; }
+      closeRecordModal();
+      render();
+    }).catch(err => {
+      alert('저장 실패: ' + err.message);
+    }).finally(() => {
+      recordSaveBtn.disabled = false;
+      recordSaveBtn.textContent = '저장';
+    });
+  });
 
   // ---- 책 목록 채우기 (네트워크 호출 없이 하드코딩된 목록 사용) ----
   bookSelect.innerHTML = '<option value="">책 선택</option>';
