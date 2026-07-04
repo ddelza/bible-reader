@@ -153,16 +153,21 @@
       const cbName = '_cb' + Date.now() + Math.floor(Math.random() * 1e6);
       const script = document.createElement('script');
       script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
-      const timeoutId = setTimeout(() => { delete window[cbName]; script.remove(); reject(new Error('시간 초과')); }, 10000);
+      const timeoutId = setTimeout(() => { delete window[cbName]; script.remove(); reject(new Error('시간 초과')); }, 15000);
       window[cbName] = data => { clearTimeout(timeoutId); delete window[cbName]; script.remove(); resolve(data); };
       script.onerror = () => { clearTimeout(timeoutId); delete window[cbName]; script.remove(); reject(new Error('요청 실패')); };
       document.head.appendChild(script);
     });
   }
-  function jsonp(url) {
-    return jsonpOnce(url).catch(() => new Promise((resolve, reject) => {
-      setTimeout(() => { jsonpOnce(url).then(resolve).catch(reject); }, 1500);
-    }));
+  // Apps Script 콜드스타트/일시 오류에 대비해 최대 3회까지 시도한다.
+  function jsonp(url, attempt) {
+    attempt = attempt || 1;
+    return jsonpOnce(url).catch(err => {
+      if (attempt >= 3) throw err;
+      return new Promise((resolve, reject) => {
+        setTimeout(() => { jsonp(url, attempt + 1).then(resolve).catch(reject); }, 1500 * attempt);
+      });
+    });
   }
 
   // ---- 초기화 ----
@@ -263,19 +268,27 @@
   }
 
   // ---- 책 목록 로드 ----
-  callApi('getBooks').then(data => {
-    booksCache = data;
-    bookSelect.innerHTML = '<option value="">책 선택</option>';
-    data.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.색인;
-      opt.textContent = b.번호 + '. ' + b.이름;
-      bookSelect.appendChild(opt);
+  function loadBooks() {
+    bookSelect.innerHTML = '<option value="">불러오는 중...</option>';
+    resultEl.innerHTML = '<div class="placeholder">불러오는 중...</div>';
+    callApi('getBooks').then(data => {
+      booksCache = data;
+      bookSelect.innerHTML = '<option value="">책 선택</option>';
+      data.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.색인;
+        opt.textContent = b.번호 + '. ' + b.이름;
+        bookSelect.appendChild(opt);
+      });
+      showPlaceholder();
+    }).catch(err => {
+      bookSelect.innerHTML = '<option value="">로드 실패</option>';
+      resultEl.innerHTML = '<div class="error">책 목록을 불러오지 못했습니다: ' + escapeHtml(err.message) +
+        '</div><div style="text-align:center;margin-top:12px;"><button id="retryBooksBtn" type="button" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;">다시 시도</button></div>';
+      document.getElementById('retryBooksBtn').addEventListener('click', loadBooks);
     });
-  }).catch(err => {
-    bookSelect.innerHTML = '<option value="">로드 실패</option>';
-    showError('책 목록을 불러오지 못했습니다: ' + err.message);
-  });
+  }
+  loadBooks();
 </script>
 </body>
 </html>
