@@ -125,7 +125,76 @@
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxbaX-v_fqrTCO0SINsHmgbepVfWLna2Z7fUC7XGh0bDLrT31EPRaiy8x9g26UJHPu0/exec';
   const TRANSLATION_KEY = 'bible_reader_translation';
 
-  let booksCache = [];
+  // 성경 66권 목록 (성경명 시트 기준 고정값) — 매 로딩마다 네트워크로 가져올 필요 없는
+  // 정적 데이터라 하드코딩한다. 시트의 "성경" 탭(실제 구절 본문)만 API로 조회한다.
+  const booksCache = [
+    { 번호: 1, 이름: '창세기', 장수: 50, 색인: '창' },
+    { 번호: 2, 이름: '출애굽기', 장수: 40, 색인: '출' },
+    { 번호: 3, 이름: '레위기', 장수: 27, 색인: '레' },
+    { 번호: 4, 이름: '민수기', 장수: 36, 색인: '민' },
+    { 번호: 5, 이름: '신명기', 장수: 34, 색인: '신' },
+    { 번호: 6, 이름: '여호수아', 장수: 24, 색인: '수' },
+    { 번호: 7, 이름: '사사기', 장수: 21, 색인: '삿' },
+    { 번호: 8, 이름: '룻기', 장수: 4, 색인: '룻' },
+    { 번호: 9, 이름: '사무엘상', 장수: 31, 색인: '삼상' },
+    { 번호: 10, 이름: '사무엘하', 장수: 24, 색인: '삼하' },
+    { 번호: 11, 이름: '열왕기상', 장수: 22, 색인: '왕상' },
+    { 번호: 12, 이름: '열왕기하', 장수: 25, 색인: '왕하' },
+    { 번호: 13, 이름: '역대상', 장수: 29, 색인: '대상' },
+    { 번호: 14, 이름: '역대하', 장수: 36, 색인: '대하' },
+    { 번호: 15, 이름: '에스라', 장수: 10, 색인: '스' },
+    { 번호: 16, 이름: '느헤미야', 장수: 13, 색인: '느' },
+    { 번호: 17, 이름: '에스더', 장수: 10, 색인: '에' },
+    { 번호: 18, 이름: '욥기', 장수: 42, 색인: '욥' },
+    { 번호: 19, 이름: '시편', 장수: 150, 색인: '시' },
+    { 번호: 20, 이름: '잠언', 장수: 31, 색인: '잠' },
+    { 번호: 21, 이름: '전도서', 장수: 12, 색인: '전' },
+    { 번호: 22, 이름: '아가', 장수: 8, 색인: '아' },
+    { 번호: 23, 이름: '이사야', 장수: 66, 색인: '사' },
+    { 번호: 24, 이름: '예레미야', 장수: 52, 색인: '렘' },
+    { 번호: 25, 이름: '예레미야 애가', 장수: 5, 색인: '애' },
+    { 번호: 26, 이름: '에스겔', 장수: 48, 색인: '겔' },
+    { 번호: 27, 이름: '다니엘', 장수: 12, 색인: '단' },
+    { 번호: 28, 이름: '호세아', 장수: 14, 색인: '호' },
+    { 번호: 29, 이름: '요엘', 장수: 3, 색인: '욜' },
+    { 번호: 30, 이름: '아모스', 장수: 9, 색인: '암' },
+    { 번호: 31, 이름: '오바댜', 장수: 1, 색인: '옵' },
+    { 번호: 32, 이름: '요나', 장수: 4, 색인: '욘' },
+    { 번호: 33, 이름: '미가', 장수: 7, 색인: '미' },
+    { 번호: 34, 이름: '나훔', 장수: 3, 색인: '나' },
+    { 번호: 35, 이름: '하박국', 장수: 3, 색인: '합' },
+    { 번호: 36, 이름: '스바냐', 장수: 3, 색인: '습' },
+    { 번호: 37, 이름: '학개', 장수: 2, 색인: '학' },
+    { 번호: 38, 이름: '스가랴', 장수: 14, 색인: '슥' },
+    { 번호: 39, 이름: '말라기', 장수: 4, 색인: '말' },
+    { 번호: 40, 이름: '마태복음', 장수: 28, 색인: '마' },
+    { 번호: 41, 이름: '마가복음', 장수: 16, 색인: '막' },
+    { 번호: 42, 이름: '누가복음', 장수: 24, 색인: '눅' },
+    { 번호: 43, 이름: '요한복음', 장수: 21, 색인: '요' },
+    { 번호: 44, 이름: '사도행전', 장수: 28, 색인: '행' },
+    { 번호: 45, 이름: '로마서', 장수: 16, 색인: '롬' },
+    { 번호: 46, 이름: '고린도전서', 장수: 16, 색인: '고전' },
+    { 번호: 47, 이름: '고린도후서', 장수: 13, 색인: '고후' },
+    { 번호: 48, 이름: '갈라디아서', 장수: 6, 색인: '갈' },
+    { 번호: 49, 이름: '에베소서', 장수: 6, 색인: '엡' },
+    { 번호: 50, 이름: '빌립보서', 장수: 4, 색인: '빌' },
+    { 번호: 51, 이름: '골로새서', 장수: 4, 색인: '골' },
+    { 번호: 52, 이름: '데살로니가전서', 장수: 5, 색인: '살전' },
+    { 번호: 53, 이름: '데살로니가후서', 장수: 3, 색인: '살후' },
+    { 번호: 54, 이름: '디모데전서', 장수: 6, 색인: '딤전' },
+    { 번호: 55, 이름: '디모데후서', 장수: 4, 색인: '딤후' },
+    { 번호: 56, 이름: '디도서', 장수: 3, 색인: '딛' },
+    { 번호: 57, 이름: '빌레몬서', 장수: 1, 색인: '몬' },
+    { 번호: 58, 이름: '히브리서', 장수: 13, 색인: '히' },
+    { 번호: 59, 이름: '야고보서', 장수: 5, 색인: '약' },
+    { 번호: 60, 이름: '베드로전서', 장수: 5, 색인: '벧전' },
+    { 번호: 61, 이름: '베드로후서', 장수: 3, 색인: '벧후' },
+    { 번호: 62, 이름: '요한일서', 장수: 5, 색인: '요일' },
+    { 번호: 63, 이름: '요한이서', 장수: 1, 색인: '요이' },
+    { 번호: 64, 이름: '요한삼서', 장수: 1, 색인: '요삼' },
+    { 번호: 65, 이름: '유다서', 장수: 1, 색인: '유' },
+    { 번호: 66, 이름: '요한계시록', 장수: 22, 색인: '계' }
+  ];
   let chapterCache = null; // { book, chapter, verses }
 
   // ---- 듀얼 모드 API 호출 (Apps Script 웹뷰 / GitHub Pages 양쪽 지원) ----
@@ -217,8 +286,10 @@
     resultEl.innerHTML = '<div class="placeholder">색인과 장을 선택하면 말씀을 볼 수 있어요.</div>';
   }
 
-  function showError(msg) {
-    resultEl.innerHTML = '<div class="error">' + escapeHtml(msg) + '</div>';
+  function showError(msg, onRetry) {
+    resultEl.innerHTML = '<div class="error">' + escapeHtml(msg) + '</div>' +
+      (onRetry ? '<div style="text-align:center;margin-top:12px;"><button id="retryBtn" type="button" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;">다시 시도</button></div>' : '');
+    if (onRetry) document.getElementById('retryBtn').addEventListener('click', onRetry);
   }
 
   function loadChapter() {
@@ -236,7 +307,7 @@
         verseSelect.disabled = false;
         render();
       })
-      .catch(err => showError('불러오기 실패: ' + err.message));
+      .catch(err => showError('불러오기 실패: ' + err.message, loadChapter));
   }
 
   function cleanText(translation, text) {
@@ -267,28 +338,14 @@
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // ---- 책 목록 로드 ----
-  function loadBooks() {
-    bookSelect.innerHTML = '<option value="">불러오는 중...</option>';
-    resultEl.innerHTML = '<div class="placeholder">불러오는 중...</div>';
-    callApi('getBooks').then(data => {
-      booksCache = data;
-      bookSelect.innerHTML = '<option value="">책 선택</option>';
-      data.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b.색인;
-        opt.textContent = b.번호 + '. ' + b.이름;
-        bookSelect.appendChild(opt);
-      });
-      showPlaceholder();
-    }).catch(err => {
-      bookSelect.innerHTML = '<option value="">로드 실패</option>';
-      resultEl.innerHTML = '<div class="error">책 목록을 불러오지 못했습니다: ' + escapeHtml(err.message) +
-        '</div><div style="text-align:center;margin-top:12px;"><button id="retryBooksBtn" type="button" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;">다시 시도</button></div>';
-      document.getElementById('retryBooksBtn').addEventListener('click', loadBooks);
-    });
-  }
-  loadBooks();
+  // ---- 책 목록 채우기 (네트워크 호출 없이 하드코딩된 목록 사용) ----
+  bookSelect.innerHTML = '<option value="">책 선택</option>';
+  booksCache.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.색인;
+    opt.textContent = b.번호 + '. ' + b.이름;
+    bookSelect.appendChild(opt);
+  });
 </script>
 </body>
 </html>
