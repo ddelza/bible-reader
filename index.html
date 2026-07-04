@@ -489,6 +489,9 @@
   }
 
   // ---- 절 탭(번역 펼치기) / 길게 누르기(기록하기) ----
+  // 모바일에서 모달이 열리며 DOM이 바뀌면 브라우저가 합성 click 이벤트를
+  // 누락시키는 경우가 있어(두 번째 길게 누르기부터 반응 없음), click에 기대지 않고
+  // pointerdown/pointerup만으로 탭과 롱프레스를 모두 직접 판정한다.
   let pressTimer = null;
   let pressingLine = null;
   let pressStartXY = null;
@@ -496,8 +499,10 @@
   const LONG_PRESS_MS = 900;
   const MOVE_CANCEL_PX = 10;
 
-  function clearPress() {
+  function clearPressTimer() {
     if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+  function clearPressVisual() {
     if (pressingLine) { pressingLine.classList.remove('pressing'); pressingLine = null; }
   }
 
@@ -508,25 +513,33 @@
     pressStartXY = [e.clientX, e.clientY];
     pressingLine = line;
     line.classList.add('pressing');
+    clearPressTimer();
     pressTimer = setTimeout(() => {
       longPressFired = true;
-      line.classList.remove('pressing');
+      clearPressVisual();
       openRecordModal(line.dataset.verse);
     }, LONG_PRESS_MS);
   });
   resultEl.addEventListener('pointermove', e => {
     if (!pressTimer || !pressStartXY) return;
     const dx = e.clientX - pressStartXY[0], dy = e.clientY - pressStartXY[1];
-    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) clearPress();
+    if (Math.hypot(dx, dy) > MOVE_CANCEL_PX) { clearPressTimer(); clearPressVisual(); }
   });
-  resultEl.addEventListener('pointerup', clearPress);
-  resultEl.addEventListener('pointercancel', clearPress);
+  resultEl.addEventListener('pointercancel', () => {
+    clearPressTimer();
+    clearPressVisual();
+    longPressFired = false;
+  });
   resultEl.addEventListener('contextmenu', e => {
     if (e.target.closest('.verse-line')) e.preventDefault();
   });
 
-  resultEl.addEventListener('click', e => {
-    if (longPressFired) { longPressFired = false; return; } // 길게 누른 직후 발생하는 클릭은 무시
+  resultEl.addEventListener('pointerup', e => {
+    const wasLongPress = longPressFired;
+    clearPressTimer();
+    clearPressVisual();
+    longPressFired = false;
+    if (wasLongPress) return; // 이미 길게 누르기로 모달을 열었으니 탭으로 처리하지 않는다
 
     const recordBtn = e.target.closest('.record-toggle-btn');
     if (recordBtn) {
