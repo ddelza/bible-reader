@@ -17,6 +17,9 @@ function doGet(e) {
     else if (action === 'submitRecord') data = submitRecord(e.parameter.book, e.parameter.chapter, e.parameter.verse, e.parameter.date, e.parameter.author, e.parameter.content);
     else if (action === 'deleteRecord') data = deleteRecord(e.parameter.book, e.parameter.chapter, e.parameter.verse, e.parameter.ts);
     else if (action === 'getAuthors') data = getAuthors();
+    else if (action === 'getPrayers') data = getPrayers();
+    else if (action === 'submitPrayer') data = submitPrayer(e.parameter.type, e.parameter.author, e.parameter.date, e.parameter.content);
+    else if (action === 'deletePrayer') data = deletePrayer(e.parameter.ts);
     else data = { error: 'unknown action: ' + action };
   } catch (err) {
     data = { error: err.toString() };
@@ -254,6 +257,82 @@ function deleteRecord(book, chapter, verse, ts) {
 
   const records = loadRecordsFor(ss, book, chapterNum);
   return { records: records[verseNum] || [] };
+}
+
+// =============================================
+// 기도제목
+// =============================================
+
+const PRAYER_SHEET_NAME = '기도제목';
+const PRAYER_HEADER = ['종류', '작성자', '날짜', '내용', '등록시각'];
+
+function getOrCreatePrayerSheet(ss) {
+  let sheet = ss.getSheetByName(PRAYER_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PRAYER_SHEET_NAME);
+    sheet.appendRow(PRAYER_HEADER);
+  }
+  return sheet;
+}
+
+// 전체 기도제목을 최신 등록순으로 반환한다. 검색/작성자/기간 필터는 프론트에서
+// 처리한다 — 성경 본문과 달리 데이터량이 적어 서버에서 범위를 좁힐 필요가 없다.
+function getPrayers() {
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreatePrayerSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const data = sheet.getRange(2, 1, lastRow - 1, PRAYER_HEADER.length).getValues();
+  const prayers = data.map(row => {
+    const [type, author, date, content, ts] = row;
+    if (!author && !content) return null;
+    return {
+      종류: String(type || ''),
+      작성자: String(author || ''),
+      날짜: formatRecordDate(date),
+      내용: String(content || ''),
+      등록시각: ts instanceof Date ? ts.toISOString() : String(ts || '')
+    };
+  }).filter(Boolean);
+
+  prayers.sort((a, b) => b.등록시각.localeCompare(a.등록시각));
+  return prayers;
+}
+
+function submitPrayer(type, author, date, content) {
+  type = String(type || '').trim();
+  author = String(author || '').trim();
+  content = String(content || '').trim();
+  if (!type || !author || !content) {
+    return { error: '종류, 작성자, 내용을 모두 입력해주세요.' };
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreatePrayerSheet(ss);
+  sheet.appendRow([type, author, date, content, new Date()]);
+
+  return getPrayers();
+}
+
+// 등록시각(밀리초 단위 ISO 문자열, 사실상 고유 키)으로 기도제목 한 건을 찾아 삭제한다.
+function deletePrayer(ts) {
+  if (!ts) return { error: '삭제할 기도제목을 특정할 수 없습니다.' };
+
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreatePrayerSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, PRAYER_HEADER.length).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowTs = data[i][4] instanceof Date ? data[i][4].toISOString() : String(data[i][4] || '');
+      if (rowTs === ts) {
+        sheet.deleteRow(2 + i);
+        break;
+      }
+    }
+  }
+  return getPrayers();
 }
 
 // =============================================

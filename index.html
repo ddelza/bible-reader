@@ -28,9 +28,27 @@
   }
   h1 {
     font-size: 22px;
-    text-align: center;
-    margin: 8px 0 20px;
+    margin: 0;
     color: var(--accent);
+  }
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0 20px;
+  }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
   }
   .controls {
     background: var(--card);
@@ -210,7 +228,10 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>📖 성경 읽기</h1>
+  <div class="page-header">
+    <h1>📖 성경 읽기</h1>
+    <a href="prayer.html" class="nav-btn">🙏 기도제목</a>
+  </div>
 
   <div class="controls">
     <div class="field">

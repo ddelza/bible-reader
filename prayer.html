@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기도제목</title>
+<style>
+  :root {
+    --accent: #6d4c2f;
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --border: #e5ddd0;
+    --text: #2b2620;
+    --muted: #8a8070;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 60px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0;
+    color: var(--accent);
+  }
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0 20px;
+  }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .add-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .filters {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field.full { grid-column: 1 / -1; }
+  .field.half { grid-column: span 1; }
+  label { font-size: 12px; color: var(--muted); }
+  select, input[type="text"], input[type="date"], textarea {
+    padding: 10px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 15px;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .date-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .date-range input { flex: 1; min-width: 0; }
+  .date-range span { color: var(--muted); font-size: 13px; }
+
+  .prayer-list { display: flex; flex-direction: column; gap: 10px; }
+  .prayer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .prayer-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .prayer-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .type-badge {
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #f0e9dd;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .type-badge.personal { background: #e9eef5; color: #3b5a7a; }
+  .prayer-meta { font-size: 12px; color: var(--muted); }
+  .prayer-content { white-space: pre-wrap; line-height: 1.7; font-size: 15px; }
+  .prayer-delete-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .placeholder, .error {
+    color: var(--muted);
+    text-align: center;
+    padding: 30px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .error { color: #b23b3b; }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 24, 14, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .modal-box {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .modal-box h3 { margin: 0 0 14px; color: var(--accent); }
+  .modal-box label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .modal-box select, .modal-box textarea {
+    width: 100%;
+    margin-top: 4px;
+    resize: vertical;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .modal-actions button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #prayerSaveBtn { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #prayerSaveBtn:disabled { opacity: 0.6; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="page-header">
+    <h1>🙏 기도제목</h1>
+    <a href="index.html" class="nav-btn">📖 성경읽기</a>
+  </div>
+
+  <button type="button" class="add-btn" id="openAddBtn">+ 기도제목 입력하기</button>
+
+  <div class="filters">
+    <div class="field full">
+      <label for="searchInput">검색</label>
+      <input type="text" id="searchInput" placeholder="기도제목 내용으로 검색">
+    </div>
+    <div class="field">
+      <label for="typeFilter">종류</label>
+      <select id="typeFilter">
+        <option value="">전체</option>
+        <option value="공통 기도제목">공통 기도제목</option>
+        <option value="개인 기도제목">개인 기도제목</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="authorFilter">작성자</label>
+      <select id="authorFilter">
+        <option value="">전체</option>
+      </select>
+    </div>
+    <div class="field full">
+      <label>기간</label>
+      <div class="date-range">
+        <input type="date" id="startDateFilter">
+        <span>~</span>
+        <input type="date" id="endDateFilter">
+      </div>
+    </div>
+  </div>
+
+  <div id="listArea">
+    <div class="placeholder">불러오는 중...</div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="prayerModal">
+  <div class="modal-box">
+    <h3>기도제목 입력하기</h3>
+    <label>종류
+      <select id="prayerType">
+        <option value="공통 기도제목">공통 기도제목</option>
+        <option value="개인 기도제목">개인 기도제목</option>
+      </select>
+    </label>
+    <label>작성자
+      <select id="prayerAuthor">
+        <option value="">작성자 선택</option>
+      </select>
+    </label>
+    <label>내용<textarea id="prayerContent" rows="4" placeholder="기도제목을 입력해주세요"></textarea></label>
+    <div class="modal-actions">
+      <button id="prayerCancelBtn" type="button">취소</button>
+      <button id="prayerSaveBtn" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxbaX-v_fqrTCO0SINsHmgbepVfWLna2Z7fUC7XGh0bDLrT31EPRaiy8x9g26UJHPu0/exec';
+
+  // ---- 듀얼 모드 API 호출 (Apps Script 웹뷰 / GitHub Pages 양쪽 지원) ----
+  function callApi(action, params) {
+    return new Promise((resolve, reject) => {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        if (action === 'getPrayers') runner.getPrayers();
+        else if (action === 'submitPrayer') runner.submitPrayer(params.type, params.author, params.date, params.content);
+        else if (action === 'deletePrayer') runner.deletePrayer(params.ts);
+        else if (action === 'getAuthors') runner.getAuthors();
+        else reject(new Error('unknown action: ' + action));
+      } else {
+        const url = new URL(APPS_SCRIPT_URL);
+        url.searchParams.set('action', action);
+        if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+        jsonp(url.toString()).then(data => {
+          if (data && data.error) reject(new Error(data.error));
+          else resolve(data);
+        }).catch(reject);
+      }
+    });
+  }
+
+  function jsonpOnce(url) {
+    return new Promise((resolve, reject) => {
+      const cbName = '_cb' + Date.now() + Math.floor(Math.random() * 1e6);
+      const script = document.createElement('script');
+      script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
+      const timeoutId = setTimeout(() => { delete window[cbName]; script.remove(); reject(new Error('시간 초과')); }, 15000);
+      window[cbName] = data => { clearTimeout(timeoutId); delete window[cbName]; script.remove(); resolve(data); };
+      script.onerror = () => { clearTimeout(timeoutId); delete window[cbName]; script.remove(); reject(new Error('요청 실패')); };
+      document.head.appendChild(script);
+    });
+  }
+  // Apps Script 콜드스타트/일시 오류에 대비해 최대 3회까지 시도한다.
+  function jsonp(url, attempt) {
+    attempt = attempt || 1;
+    return jsonpOnce(url).catch(err => {
+      if (attempt >= 3) throw err;
+      return new Promise((resolve, reject) => {
+        setTimeout(() => { jsonp(url, attempt + 1).then(resolve).catch(reject); }, 1500 * attempt);
+      });
+    });
+  }
+
+  // toISOString()은 UTC 기준이라 한국 시간 새벽(자정~오전 9시)에는 하루 전 날짜가
+  // 찍히는 문제가 있다. 로컬 시간대의 연/월/일을 직접 조합해서 사용한다.
+  function todayLocalISODate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---- 상태 ----
+  let prayersCache = [];
+  let authorsCache = [];
+
+  const listArea = document.getElementById('listArea');
+  const searchInput = document.getElementById('searchInput');
+  const typeFilter = document.getElementById('typeFilter');
+  const authorFilter = document.getElementById('authorFilter');
+  const startDateFilter = document.getElementById('startDateFilter');
+  const endDateFilter = document.getElementById('endDateFilter');
+
+  [searchInput, typeFilter, authorFilter, startDateFilter, endDateFilter].forEach(el => {
+    el.addEventListener('input', render);
+    el.addEventListener('change', render);
+  });
+
+  function loadPrayers() {
+    listArea.innerHTML = '<div class="placeholder">불러오는 중...</div>';
+    callApi('getPrayers').then(data => {
+      prayersCache = data || [];
+      render();
+    }).catch(err => {
+      listArea.innerHTML = '<div class="error">불러오기 실패: ' + escapeHtml(err.message) + '</div>' +
+        '<div style="text-align:center;margin-top:12px;"><button id="retryBtn" type="button" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;">다시 시도</button></div>';
+      document.getElementById('retryBtn').addEventListener('click', loadPrayers);
+    });
+  }
+
+  function loadAuthors() {
+    callApi('getAuthors').then(data => {
+      authorsCache = data || [];
+      const options = authorsCache.map(a => '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>').join('');
+      authorFilter.innerHTML = '<option value="">전체</option>' + options;
+      document.getElementById('prayerAuthor').innerHTML = '<option value="">작성자 선택</option>' + options;
+    }).catch(() => { /* 실패해도 목록/입력은 계속 쓸 수 있게 조용히 무시 */ });
+  }
+
+  function render() {
+    const keyword = searchInput.value.trim().toLowerCase();
+    const type = typeFilter.value;
+    const author = authorFilter.value;
+    const start = startDateFilter.value;
+    const end = endDateFilter.value;
+
+    const filtered = prayersCache.filter(p => {
+      if (keyword && !p.내용.toLowerCase().includes(keyword)) return false;
+      if (type && p.종류 !== type) return false;
+      if (author && p.작성자 !== author) return false;
+      if (start && p.날짜 < start) return false;
+      if (end && p.날짜 > end) return false;
+      return true;
+    });
+
+    if (prayersCache.length === 0) {
+      listArea.innerHTML = '<div class="placeholder">아직 등록된 기도제목이 없어요.</div>';
+      return;
+    }
+    if (filtered.length === 0) {
+      listArea.innerHTML = '<div class="placeholder">조건에 맞는 기도제목이 없어요.</div>';
+      return;
+    }
+
+    listArea.innerHTML = '<div class="prayer-list">' + filtered.map(renderCard).join('') + '</div>';
+  }
+
+  function renderCard(p) {
+    const badgeClass = p.종류 === '개인 기도제목' ? 'type-badge personal' : 'type-badge';
+    return '<div class="prayer-card" data-ts="' + escapeHtml(p.등록시각) + '">' +
+      '<div class="prayer-card-head">' +
+        '<div class="prayer-badges">' +
+          '<span class="' + badgeClass + '">' + escapeHtml(p.종류) + '</span>' +
+          '<span class="prayer-meta">' + escapeHtml(p.날짜) + ' · ' + escapeHtml(p.작성자) + '</span>' +
+        '</div>' +
+        '<button type="button" class="prayer-delete-btn" title="삭제">✕</button>' +
+      '</div>' +
+      '<div class="prayer-content">' + escapeHtml(p.내용) + '</div>' +
+    '</div>';
+  }
+
+  listArea.addEventListener('click', e => {
+    const deleteBtn = e.target.closest('.prayer-delete-btn');
+    if (!deleteBtn) return;
+    const card = deleteBtn.closest('.prayer-card');
+    if (confirm('이 기도제목을 삭제할까요?')) {
+      callApi('deletePrayer', { ts: card.dataset.ts }).then(data => {
+        prayersCache = data || [];
+        render();
+      }).catch(err => alert('삭제 실패: ' + err.message));
+    }
+  });
+
+  // ---- 입력 모달 ----
+  const prayerModal = document.getElementById('prayerModal');
+  const prayerType = document.getElementById('prayerType');
+  const prayerAuthor = document.getElementById('prayerAuthor');
+  const prayerContent = document.getElementById('prayerContent');
+  const prayerSaveBtn = document.getElementById('prayerSaveBtn');
+  const prayerCancelBtn = document.getElementById('prayerCancelBtn');
+  const openAddBtn = document.getElementById('openAddBtn');
+
+  function openModal() {
+    prayerType.value = '공통 기도제목';
+    prayerAuthor.value = '';
+    prayerContent.value = '';
+    prayerModal.classList.remove('hidden');
+  }
+  function closeModal() {
+    prayerModal.classList.add('hidden');
+  }
+  openAddBtn.addEventListener('click', openModal);
+  prayerCancelBtn.addEventListener('click', closeModal);
+  prayerModal.addEventListener('click', e => {
+    if (e.target === prayerModal) closeModal();
+  });
+
+  prayerSaveBtn.addEventListener('click', () => {
+    const type = prayerType.value;
+    const author = prayerAuthor.value.trim();
+    const content = prayerContent.value.trim();
+    if (!author || !content) { alert('작성자와 내용을 입력해주세요.'); return; }
+
+    prayerSaveBtn.disabled = true;
+    prayerSaveBtn.textContent = '저장 중...';
+    callApi('submitPrayer', { type: type, author: author, date: todayLocalISODate(), content: content })
+      .then(data => {
+        prayersCache = data || [];
+        closeModal();
+        render();
+      })
+      .catch(err => alert('저장 실패: ' + err.message))
+      .finally(() => {
+        prayerSaveBtn.disabled = false;
+        prayerSaveBtn.textContent = '저장';
+      });
+  });
+
+  loadAuthors();
+  loadPrayers();
+</script>
+</body>
+</html>
