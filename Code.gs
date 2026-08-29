@@ -19,6 +19,7 @@ function doGet(e) {
     else if (action === 'getAuthors') data = getAuthors();
     else if (action === 'getPrayers') data = getPrayers();
     else if (action === 'submitPrayer') data = submitPrayer(e.parameter.type, e.parameter.author, e.parameter.date, e.parameter.content);
+    else if (action === 'updatePrayer') data = updatePrayer(e.parameter.ts, e.parameter.type, e.parameter.author, e.parameter.content);
     else if (action === 'deletePrayer') data = deletePrayer(e.parameter.ts);
     else data = { error: 'unknown action: ' + action };
   } catch (err) {
@@ -312,6 +313,34 @@ function submitPrayer(type, author, date, content) {
   const sheet = getOrCreatePrayerSheet(ss);
   sheet.appendRow([type, author, date, content, new Date()]);
 
+  return getPrayers();
+}
+
+// 등록시각(밀리초 단위 ISO 문자열, 사실상 고유 키)으로 기도제목 한 건을 찾아 종류/작성자/
+// 내용을 수정한다. 날짜와 등록시각(정렬·식별 키)은 그대로 둔다.
+function updatePrayer(ts, type, author, content) {
+  type = String(type || '').trim();
+  author = String(author || '').trim();
+  content = String(content || '').trim();
+  if (!ts || !type || !author || !content) {
+    return { error: '종류, 작성자, 내용을 모두 입력해주세요.' };
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID);
+  const sheet = getOrCreatePrayerSheet(ss);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const data = sheet.getRange(2, 1, lastRow - 1, PRAYER_HEADER.length).getValues();
+    for (let i = 0; i < data.length; i++) {
+      const rowTs = data[i][4] instanceof Date ? data[i][4].toISOString() : String(data[i][4] || '');
+      if (rowTs === ts) {
+        const row = 2 + i;
+        sheet.getRange(row, 1, 1, 2).setValues([[type, author]]);
+        sheet.getRange(row, 4, 1, 1).setValues([[content]]);
+        break;
+      }
+    }
+  }
   return getPrayers();
 }
 
